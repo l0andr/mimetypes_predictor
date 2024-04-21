@@ -1,1 +1,5 @@
 dataclasses-json
+numpy
+tqdm
+pandas
+scikit-learn
