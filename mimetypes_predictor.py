@@ -111,7 +111,8 @@ class MIMETypePredictor:
             vectors.append(self.extract_features(data[i]))
         return f1_score(labels,self.model_kernel.predict(vectors),average='weighted')
     def predict(self, data: bytes) -> str:
-        return self.model_kernel.predict(self.extract_features(data))
+        features = np.array(self.extract_features(data))
+        return self.model_kernel.predict(features.reshape(1,len(features)))
 
 def prepare_train_dataset(path:str,verbose:int=0) -> (List[bytes],List[str]):
     data = []
@@ -126,24 +127,40 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="Train and MIME Type predictor model",
         formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument("-input_dir", help="Directory with train files", type=str, required=True)
-    parser.add_argument("-model", help="File for model", type=str, default="model/test.model")
+    parser.add_argument("-input_dir", help="Directory with files for model train", type=str, default="")
+    parser.add_argument("-model", help="File for/with model. If file exists model will be loaded and tested on train data", type=str, required=True)
+    parser.add_argument("-i", help="input file",type=str, default="")
     parser.add_argument("-verbose",help="Verbose level",type=int,default = 1)
 
     args = parser.parse_args()
     verbose = args.verbose
     input_dir = args.input_dir
     model_file = args.model
-    data,labels = prepare_train_dataset(input_dir,verbose)
-    if verbose > 1:
-        print(f"Set of train lables {set(labels)}")
-    model = MIMETypePredictor()
-    model.train(data=data,labels=labels,verbose=verbose)
-    model.save(model_file)
-    new_model = MIMETypePredictor()
-    new_model.load(model_file)
-    accuracy = new_model.model_accuracy(data, labels, verbose)
-    f1_score_value = new_model.model_f1_score(data, labels, verbose)
-    if verbose > 0:
-        print(f"Model accuracy is: {accuracy}, F1 score: {f1_score_value}")
-
+    if len(args.input_dir) == 0 and len(args.i) == 0:
+        raise Exception("Either input_dir or input file should be ser")
+    if len(args.input_dir) > 0:
+        data, labels = prepare_train_dataset(input_dir, verbose)
+        if verbose > 1:
+            print(f"Set of train lables {set(labels)}")
+    if len(args.i) > 0:
+        data = [open(args.i, "rb").read()]
+        labels = ["unknown"]
+    if os.path.exists(model_file):
+        if verbose > 0:
+            print(f"Model file {model_file} exists. Loading model")
+        model = MIMETypePredictor()
+        model.load(model_file)
+        label = model.predict(data[0])
+        if verbose > 0:
+            print(f"Predicted label for file {args.i}: {label}")
+        else:
+            print(label)
+    elif len(data) > 1:
+        if verbose > 0:
+            print(f"Model file {model_file} does not exist. Training model")
+        model = MIMETypePredictor()
+        model.train(data=data, labels=labels, verbose=verbose)
+        model.save(model_file)
+    else:
+        if verbose > 0:
+            print(f"Model file {model_file} does not exist and train data do not specified. Exit")
